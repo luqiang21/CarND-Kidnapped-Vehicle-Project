@@ -84,7 +84,7 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 	// NOTE: this method will NOT be called by the grading code. But you will probably find it useful to
 	//   implement this method and use it as a helper during the updateWeights phase.
 	double distance;
-	
+
 	for(int i=0; i < observations.size(); i++){
 		double min_dist = std::numeric_limits<double>::max();
 
@@ -119,6 +119,30 @@ void ParticleFilter::resample() {
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 
+	// http://en.cppreference.com/w/cpp/algorithm/max_element use max_element to
+	// obtain maximum element in the vector
+	default_random_engine gen;
+
+	double max_weight = *max_element(weights.begin(), weights.end());
+	uniform_real_distribution <double> dist_beta(0.0, 2 * max_weight);
+	double beta = 0.0;
+	int index = rand() % num_particles;
+
+	std::vector <Particle> particles_resampled;
+
+	// wheel algorithm
+	for(int i=0; i < num_particles; i++){
+		beta += dist_beta(gen);
+
+		while(beta > weights[index]){
+			beta -= weights[index];
+			index = (index + 1) % num_particles;
+
+		}
+		particles_resampled.push_back(particles[index]);
+	}
+
+	particles = particles_resampled;
 }
 
 Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
