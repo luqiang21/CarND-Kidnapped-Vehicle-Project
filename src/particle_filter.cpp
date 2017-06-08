@@ -71,8 +71,8 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 		}else{
 
-			p.x += cos(p.theta) * velocity + dist_x(gen);
-			p.y += sin(p.theta) * velocity + dist_y(gen);
+			p.x += cos(p.theta) * velocity * delta_t + dist_x(gen);
+			p.y += sin(p.theta) * velocity * delta_t + dist_y(gen);
 			p.theta += dist_theta(gen);
 
 		}
@@ -179,11 +179,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 			double exponent = -(diff_x_2 / (2*std_x_2) + diff_y_2 / (2*std_y_2));
 			double multiplier = 1.0 / std_x_y * exp(exponent);
 
-			if(final_weight > 1e-15){
-				if (multiplier > 0){
-				final_weight *= multiplier;
-			}
-		}
+			final_weight *= multiplier;
+
 			// cout << diff_x << "     " << diff_y << "     " << final_weight << endl;  /////////////////
 
 		}
@@ -228,18 +225,7 @@ void ParticleFilter::resample() {
 
 	particles = particles_resampled;
 
-
-
-	// default_random_engine gen;
-	//  // Creates a discrete distribution for weight.
-	//  discrete_distribution<int> dist_w(weights.begin(), weights.end());
-	//  vector<Particle> resamp_particles;
-	//  // Resample
-	//  for(Particle particle: particles){
-	// 		 resamp_particles.push_back(particles[dist_w(gen)]);
-	//  }
-	//  particles = resamp_particles;
-
+	
 }
 
 
