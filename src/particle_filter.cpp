@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <iterator>
+#include <unordered_map>
 
 #include "particle_filter.h"
 
@@ -38,12 +39,11 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 		p.x = dist_x(gen);
 		p.y = dist_y(gen);
 		p.theta = dist_theta(gen);
-		p.weight = 1;
+		p.weight = 1.0;
 
 		particles.push_back(p);
-		weights.push_back(1);
+		weights.push_back(1.0);
 	}
-
 
 	is_initialized = true;
 }
@@ -60,20 +60,24 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 	for(int i=0; i < num_particles; i++){
 		// if yaw_rate is 0, the equation in the lesson cannot be used.
-		if(yaw_rate == 0){
-			particles[i].x += cos(particles[i].theta) * velocity + dist_x(gen);
-			particles[i].y += sin(particles[i].theta) * velocity + dist_y(gen);
-			particles[i].theta += dist_theta(gen);
-
-		}else{
-			double new_theta = particles[i].theta + yaw_rate * delta_t + dist_theta(gen);
+		Particle p = particles[i];
+		if(yaw_rate != 0){
+ 			double theta_new = p.theta + yaw_rate * delta_t ;
 			double coeff = velocity / yaw_rate;
 
-			particles[i].x += coeff * (sin(new_theta) - sin(particles[i].theta)) + dist_x(gen);
-			particles[i].y += coeff * (cos(particles[i].theta) - cos(new_theta)) + dist_y(gen);
-			particles[i].theta = new_theta;
+			p.x += coeff * (sin(theta_new) - sin(p.theta)) + dist_x(gen);
+			p.y += coeff * (cos(p.theta) - cos(theta_new)) + dist_y(gen);
+			p.theta = theta_new + dist_theta(gen);
+
+		}else{
+
+			p.x += cos(p.theta) * velocity + dist_x(gen);
+			p.y += sin(p.theta) * velocity + dist_y(gen);
+			p.theta += dist_theta(gen);
 
 		}
+
+		particles[i] = p;
 	}
 
 }
@@ -87,15 +91,18 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 
 	for(int i=0; i < observations.size(); i++){
 		double min_dist = std::numeric_limits<double>::max();
+		int min_index = 0;
 
 		for(int j=0; j < predicted.size(); j++){
 			distance = dist(observations[i].x, observations[i].y, predicted[j].x, predicted[j].y);
 
 			if(distance < min_dist){
 				min_dist = distance;
-				observations[i].id = predicted[j].id;
+				min_index = predicted[j].id;
 			}
 		}
+
+		observations[i].id = min_index;
 	}
 
 }
@@ -114,7 +121,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   http://planning.cs.uiuc.edu/node99.html
 	double std_x_2 = pow(std_landmark[0], 2);
 	double std_y_2 = pow(std_landmark[1], 2);
-	double std_x_y = std_landmark[0] * std_landmark[1];
+	double std_x_y = 2 * M_PI * std_landmark[0] * std_landmark[1];
 
 	for(int i=0; i < num_particles; i++){
 		double p_x = particles[i].x;
@@ -123,31 +130,34 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 		// predict landmarks within sensor_range
 		vector <LandmarkObs> predicted;
+		unordered_map<int, LandmarkObs> predicted_map;
 
 		for (int j=0; j < map_landmarks.landmark_list.size(); j++){
 
-      int id = map_landmarks.landmark_list[j].id_i;
+      int id = map_landmarks.landmark_list[j].id_i; // start from 1
       double land_x = map_landmarks.landmark_list[j].x_f;
       double land_y = map_landmarks.landmark_list[j].y_f;
 
-      if (dist(p_x, p_y, land_x, land_y) < sensor_range) {
+      if (dist(p_x, p_y, land_x, land_y) <= sensor_range) {
 				LandmarkObs landmark;
 				landmark.id = id;
 				landmark.x = land_x;
 				landmark.y = land_y;
 
         predicted.push_back(landmark);
+				predicted_map[id] = landmark;
       }
+		}
 
 		// transformation based on p_x, p_y, p_theta and observed landmark positions.
 		vector <LandmarkObs> observations_transformed;
 		for (int k=0; k < observations.size(); k++){
 			LandmarkObs observation_transformed;
-			observation_transformed.id = observations[i].id;
-			observation_transformed.x = observations[i].x * cos(p_theta)
-																- observations[i].y * sin(p_theta) + p_x;
-			observation_transformed.y = observations[i].x * sin(p_theta)
-																- observations[i].y * cos(p_theta) + p_y;
+			observation_transformed.id = observations[k].id;
+			observation_transformed.x = observations[k].x * cos(p_theta)
+																	- observations[k].y * sin(p_theta) + p_x;
+			observation_transformed.y = observations[k].x * sin(p_theta)
+																	+ observations[k].y * cos(p_theta) + p_y;
 
 			observations_transformed.push_back(observation_transformed);
 		}
@@ -157,23 +167,30 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 		// Update weight
 		double final_weight = 1.0;
-		for (int l=0; l < observations.size(); l++){
-			int ID = observations_transformed[l].id;
-			double diff_x = observations_transformed[l].x -	predicted[ID].x;
+		for (int l=0; l < observations_transformed.size(); l++){
+			// extract corresponding prediction
+			LandmarkObs pred = predicted_map[observations_transformed[l].id];
+
+			double diff_x = observations_transformed[l].x -	pred.x;
 			double diff_x_2 = diff_x * diff_x;
-			double diff_y = observations_transformed[l].y -	predicted[ID].y;
+			double diff_y = observations_transformed[l].y -	pred.y;
 			double diff_y_2 = diff_y * diff_y;
 
-			double exponent = (diff_x_2 / (2*std_x_2) + diff_y_2 / (2*std_y_2));
-			final_weight *= 1/ (2*M_PI*std_x_y) * exp(exponent);
+			double exponent = -(diff_x_2 / (2*std_x_2) + diff_y_2 / (2*std_y_2));
+			final_weight *= 1.0 / std_x_y * exp(exponent);
+			cout << diff_x << "     " << diff_y << "     " << 1 / std_x_y * exp(exponent) << endl;  /////////////////
+
 		}
 
+		// update weight
 		particles[i].weight = final_weight;
 		weights[i] = final_weight;
 
 	}
 
 }
+
+
 
 void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight.
@@ -182,29 +199,43 @@ void ParticleFilter::resample() {
 
 	// http://en.cppreference.com/w/cpp/algorithm/max_element use max_element to
 	// obtain maximum element in the vector
+	// default_random_engine gen;
+	//
+	// double max_weight = *max_element(weights.begin(), weights.end());
+	// uniform_real_distribution <double> dist_beta(0.0, 2 * max_weight);
+	// double beta = 0.0;
+	// int index = rand() % num_particles; // random select index
+	//
+	// std::vector <Particle> particles_resampled;
+	//
+	// // wheel algorithm
+	// for(int i=0; i < num_particles; i++){
+	// 	beta += dist_beta(gen);
+	//
+	// 	while(beta > weights[index]){
+	// 		beta -= weights[index];
+	// 		index = (index + 1) % num_particles;
+	//
+	// 	}
+	// 	particles_resampled.push_back(particles[index]);
+	// }
+	//
+	// particles = particles_resampled;
+
+
+
 	default_random_engine gen;
+	 // Creates a discrete distribution for weight.
+	 discrete_distribution<int> dist_w(weights.begin(), weights.end());
+	 vector<Particle> resamp_particles;
+	 // Resample
+	 for(Particle particle: particles){
+			 resamp_particles.push_back(particles[dist_w(gen)]);
+	 }
+	 particles = resamp_particles;
 
-	double max_weight = *max_element(weights.begin(), weights.end());
-	uniform_real_distribution <double> dist_beta(0.0, 2 * max_weight);
-	double beta = 0.0;
-	int index = rand() % num_particles;
-
-	std::vector <Particle> particles_resampled;
-
-	// wheel algorithm
-	for(int i=0; i < num_particles; i++){
-		beta += dist_beta(gen);
-
-		while(beta > weights[index]){
-			beta -= weights[index];
-			index = (index + 1) % num_particles;
-
-		}
-		particles_resampled.push_back(particles[index]);
-	}
-
-	particles = particles_resampled;
 }
+
 
 Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
 {
