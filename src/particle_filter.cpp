@@ -25,7 +25,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	//   x, y, theta and their uncertainties from GPS) and all weights to 1.
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
-	num_particles = 1000;
+	num_particles = 21;
 	default_random_engine gen;
 
 	normal_distribution<double> dist_x(x, std[0]);
@@ -177,8 +177,14 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 			double diff_y_2 = diff_y * diff_y;
 
 			double exponent = -(diff_x_2 / (2*std_x_2) + diff_y_2 / (2*std_y_2));
-			final_weight *= 1.0 / std_x_y * exp(exponent);
-			cout << diff_x << "     " << diff_y << "     " << 1 / std_x_y * exp(exponent) << endl;  /////////////////
+			double multiplier = 1.0 / std_x_y * exp(exponent);
+
+			if(final_weight > 1e-15){
+				if (multiplier > 0){
+				final_weight *= multiplier;
+			}
+		}
+			// cout << diff_x << "     " << diff_y << "     " << final_weight << endl;  /////////////////
 
 		}
 
@@ -199,40 +205,40 @@ void ParticleFilter::resample() {
 
 	// http://en.cppreference.com/w/cpp/algorithm/max_element use max_element to
 	// obtain maximum element in the vector
-	// default_random_engine gen;
-	//
-	// double max_weight = *max_element(weights.begin(), weights.end());
-	// uniform_real_distribution <double> dist_beta(0.0, 2 * max_weight);
-	// double beta = 0.0;
-	// int index = rand() % num_particles; // random select index
-	//
-	// std::vector <Particle> particles_resampled;
-	//
-	// // wheel algorithm
-	// for(int i=0; i < num_particles; i++){
-	// 	beta += dist_beta(gen);
-	//
-	// 	while(beta > weights[index]){
-	// 		beta -= weights[index];
-	// 		index = (index + 1) % num_particles;
-	//
-	// 	}
-	// 	particles_resampled.push_back(particles[index]);
-	// }
-	//
-	// particles = particles_resampled;
-
-
-
 	default_random_engine gen;
-	 // Creates a discrete distribution for weight.
-	 discrete_distribution<int> dist_w(weights.begin(), weights.end());
-	 vector<Particle> resamp_particles;
-	 // Resample
-	 for(Particle particle: particles){
-			 resamp_particles.push_back(particles[dist_w(gen)]);
-	 }
-	 particles = resamp_particles;
+
+	double max_weight = *max_element(weights.begin(), weights.end());
+	uniform_real_distribution <double> dist_beta(0.0, 2 * max_weight);
+	double beta = 0.0;
+	int index = rand() % num_particles; // random select index
+
+	std::vector <Particle> particles_resampled;
+
+	// wheel algorithm
+	for(int i=0; i < num_particles; i++){
+		beta += dist_beta(gen);
+
+		while(beta > weights[index]){
+			beta -= weights[index];
+			index = (index + 1) % num_particles;
+
+		}
+		particles_resampled.push_back(particles[index]);
+	}
+
+	particles = particles_resampled;
+
+
+
+	// default_random_engine gen;
+	//  // Creates a discrete distribution for weight.
+	//  discrete_distribution<int> dist_w(weights.begin(), weights.end());
+	//  vector<Particle> resamp_particles;
+	//  // Resample
+	//  for(Particle particle: particles){
+	// 		 resamp_particles.push_back(particles[dist_w(gen)]);
+	//  }
+	//  particles = resamp_particles;
 
 }
 
