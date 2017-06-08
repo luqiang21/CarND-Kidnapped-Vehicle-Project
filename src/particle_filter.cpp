@@ -59,7 +59,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	normal_distribution<double> dist_theta(0, std_pos[2]);
 
 	for(int i=0; i < num_particles; i++){
-
+		// if yaw_rate is 0, the equation in the lesson cannot be used.
 		if(yaw_rate == 0){
 			particles[i].x += cos(particles[i].theta) * velocity + dist_x(gen);
 			particles[i].y += sin(particles[i].theta) * velocity + dist_y(gen);
@@ -112,6 +112,67 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   and the following is a good resource for the actual equation to implement (look at equation
 	//   3.33
 	//   http://planning.cs.uiuc.edu/node99.html
+	double std_x_2 = pow(std_landmark[0], 2);
+	double std_y_2 = pow(std_landmark[1], 2);
+	double std_x_y = std_landmark[0] * std_landmark[1];
+
+	for(int i=0; i < num_particles; i++){
+		double p_x = particles[i].x;
+		double p_y = particles[i].y;
+		double p_theta = particles[i].theta;
+
+		// predict landmarks within sensor_range
+		vector <LandmarkObs> predicted;
+
+		for (int j=0; j < map_landmarks.landmark_list.size(); j++){
+
+      int id = map_landmarks.landmark_list[j].id_i;
+      double land_x = map_landmarks.landmark_list[j].x_f;
+      double land_y = map_landmarks.landmark_list[j].y_f;
+
+      if (dist(p_x, p_y, land_x, land_y) < sensor_range) {
+				LandmarkObs landmark;
+				landmark.id = id;
+				landmark.x = land_x;
+				landmark.y = land_y;
+
+        predicted.push_back(landmark);
+      }
+
+		// transformation based on p_x, p_y, p_theta and observed landmark positions.
+		vector <LandmarkObs> observations_transformed;
+		for (int k=0; k < observations.size(); k++){
+			LandmarkObs observation_transformed;
+			observation_transformed.id = observations[i].id;
+			observation_transformed.x = observations[i].x * cos(p_theta)
+																- observations[i].y * sin(p_theta) + p_x;
+			observation_transformed.y = observations[i].x * sin(p_theta)
+																- observations[i].y * cos(p_theta) + p_y;
+
+			observations_transformed.push_back(observation_transformed);
+		}
+
+		// Association
+    dataAssociation(predicted, observations_transformed);
+
+		// Update weight
+		double final_weight = 1.0;
+		for (int l=0; l < observations.size(); l++){
+			int ID = observations_transformed[l].id;
+			double diff_x = observations_transformed[l].x -	predicted[ID].x;
+			double diff_x_2 = diff_x * diff_x;
+			double diff_y = observations_transformed[l].y -	predicted[ID].y;
+			double diff_y_2 = diff_y * diff_y;
+
+			double exponent = (diff_x_2 / (2*std_x_2) + diff_y_2 / (2*std_y_2));
+			final_weight *= 1/ (2*M_PI*std_x_y) * exp(exponent);
+		}
+
+		particles[i].weight = final_weight;
+		weights[i] = final_weight;
+
+	}
+
 }
 
 void ParticleFilter::resample() {
