@@ -54,9 +54,9 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
 	//  http://www.cplusplus.com/reference/random/default_random_engine/
 	default_random_engine gen;
-	normal_distribution<double> dist_x(0, std[0]);
-	normal_distribution<double> dist_y(0, std[1]);
-	normal_distribution<double> dist_theta(0, std[2]);
+	normal_distribution<double> dist_x(0, std_pos[0]);
+	normal_distribution<double> dist_y(0, std_pos[1]);
+	normal_distribution<double> dist_theta(0, std_pos[2]);
 
 	for(int i=0; i < num_particles; i++){
 
@@ -83,6 +83,20 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 	//   observed measurement to this particular landmark.
 	// NOTE: this method will NOT be called by the grading code. But you will probably find it useful to
 	//   implement this method and use it as a helper during the updateWeights phase.
+	double distance;
+	
+	for(int i=0; i < observations.size(); i++){
+		double min_dist = std::numeric_limits<double>::max();
+
+		for(int j=0; j < predicted.size(); j++){
+			distance = dist(observations[i].x, observations[i].y, predicted[j].x, predicted[j].y);
+
+			if(distance < min_dist){
+				min_dist = distance;
+				observations[i].id = predicted[j].id;
+			}
+		}
+	}
 
 }
 
